@@ -11,7 +11,7 @@
     "fcf",
     "file lock",
     "flock",
-    "lock",
+    "lock"
   ],
   "homepage": "https://fcf-framework.tech/packages/fcf-framework-lock",
   "scripts": {
