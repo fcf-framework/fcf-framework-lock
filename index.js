@@ -158,3 +158,19 @@ module.exports["isLockFile"] = (a_file, a_cb) => {
     }
   });
 };
+
+
+let fcf = typeof global !== 'undefined' && global.fcf ? global.fcf
+                                                      : {};
+if (typeof global !== 'undefined') {
+  global.fcf = fcf;
+}
+
+if (!fcf.NLock) {
+  fcf.NLock = {};
+}
+
+fcf.NLock.lockFile    = module.exports.lockFile;
+fcf.NLock.tryLockFile = module.exports.tryLockFile;
+fcf.NLock.unlockFile  = module.exports.unlockFile;
+fcf.NLock.isLockFile  = module.exports.isLockFile;
