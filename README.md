@@ -26,7 +26,7 @@ Performs a lock on the file, if the file already has a lock, the function fails 
 Performs file unlocking
 - number a_lock - The lock handle.
 - function a_cb - The function of processing the result of the function execution.
-    - Сигнатура функции a_cb: a_cb(Error|undefined a_error)
+    - Function signature a_cb: a_cb(Error|undefined a_error)
         - Error|undefined a_error - Error object.
 
 ## isLockFile(string a_filePath, function a_cb)
