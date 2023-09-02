@@ -14,9 +14,12 @@ Performs a file lock
 
 ## tryLockFile(string a_filePath, function a_cb)
 ## tryLockFile(number a_fileHandle, function a_cb)
+## tryLockFile(string a_filePath, boolean a_quiet, function a_cb)
+## tryLockFile(number a_fileHandle, boolean a_quiet, function a_cb)
 Performs a lock on the file, if the file already has a lock, the function fails (the "unavailable" property of the error object is set to true)
 - string a_filePath - The path to the file.
 - number a_fileHandle - The open file handle returned by the FS.open() functions.
+- boolean a_quiet = false - If true, then if a lock is held on a file that is already locked, the function exits without error, and the value of the a_lock argument in the callback function is undefined. If the value is not set or is false, then if the file is already locked, the function will fail with an error object containing an "unavailable" field equal to true.
 - function a_cb - The function of processing the result of the function execution.
     - Function signature: a_cb(Error|undefined a_error, number a_lock)
         - Error|undefined a_error - Error object. If the function was locking on an already locked file, then the error object will contain the "unavailable" property set to true.

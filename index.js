@@ -2,7 +2,17 @@ let libFS   = require("fs");
 let libUtil = require("util");
 let libLock = require("./build/Release/lock");
 
-module.exports = {};
+let fcf = typeof global !== 'undefined' && global.fcf ? global.fcf
+                                                      : {};
+if (typeof global !== 'undefined') {
+  global.fcf = fcf;
+}
+
+if (!fcf.NLock) {
+  fcf.NLock = {};
+}
+
+module.exports = fcf.NLock;
 
 const stAfterClose = {};
 
@@ -98,7 +108,7 @@ function islock(a_file, a_cb) {
   });
 }
 
-module.exports["lockFile"] = (a_file, a_cb) => {
+fcf.NLock.lockFile = (a_file, a_cb) => {
   libUtil.promisify(lock)(a_file, false)
   .then((a_res)=>{
     if (typeof a_cb === "function") {
@@ -113,7 +123,11 @@ module.exports["lockFile"] = (a_file, a_cb) => {
    });
 };
 
-module.exports["tryLockFile"] = (a_file, a_cb) => {
+fcf.NLock.tryLockFile = (a_file, a_quiet, a_cb) => {
+  if (typeof a_quiet == "function") {
+    a_cb = a_quiet;
+    a_quiet = false;
+  }
   libUtil.promisify(lock)(a_file, true)
   .then((a_res)=>{
     if (typeof a_cb === "function") {
@@ -123,12 +137,17 @@ module.exports["tryLockFile"] = (a_file, a_cb) => {
   })
   .catch((a_error)=>{
     if (typeof a_cb === "function") {
-      a_cb(a_error);
+      if (a_quiet && a_error.unavailable){
+        a_cb(undefined, undefined);
+      } else {
+        a_cb(a_error);
+      }
+
     }
   });
 };
 
-module.exports["unlockFile"] = (a_lock, a_cb) => {
+fcf.NLock.unlockFile = (a_lock, a_cb) => {
   libUtil.promisify(unlock)(a_lock)
   .then((a_res)=>{
     if (typeof a_cb === "function") {
@@ -144,7 +163,7 @@ module.exports["unlockFile"] = (a_lock, a_cb) => {
 
 };
 
-module.exports["isLockFile"] = (a_file, a_cb) => {
+fcf.NLock.isLockFile = (a_file, a_cb) => {
   libUtil.promisify(islock)(a_file)
   .then((a_res)=>{
     if (typeof a_cb === "function") {
@@ -158,19 +177,3 @@ module.exports["isLockFile"] = (a_file, a_cb) => {
     }
   });
 };
-
-
-let fcf = typeof global !== 'undefined' && global.fcf ? global.fcf
-                                                      : {};
-if (typeof global !== 'undefined') {
-  global.fcf = fcf;
-}
-
-if (!fcf.NLock) {
-  fcf.NLock = {};
-}
-
-fcf.NLock.lockFile    = module.exports.lockFile;
-fcf.NLock.tryLockFile = module.exports.tryLockFile;
-fcf.NLock.unlockFile  = module.exports.unlockFile;
-fcf.NLock.isLockFile  = module.exports.isLockFile;

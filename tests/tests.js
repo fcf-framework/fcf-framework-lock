@@ -82,8 +82,20 @@ async function main(){
         isFail = true;
       }
     }
+    let lock2 = await libUtil.promisify(libLock.tryLockFile)("index.js", true);
+    if (lock2 !== undefined) {
+      isFail = true;
+    }
     try {
       let lock2 = await libUtil.promisify(libLock.tryLockFile)("index.js1231231313123");
+      isFail = true;
+    } catch(e){
+      if (e.unavailable) {
+        isFail = true;
+      }
+    }
+    try {
+      let lock2 = await libUtil.promisify(libLock.tryLockFile)("index.js1231231313123", true);
       isFail = true;
     } catch(e){
       if (e.unavailable) {
@@ -93,6 +105,12 @@ async function main(){
     await libUtil.promisify(libLock.unlockFile)(lock);
     try {
       let lock2 = await libUtil.promisify(libLock.tryLockFile)("index.js");
+      await libUtil.promisify(libLock.unlockFile)(lock2);
+    } catch(e){
+      isFail = true;
+    }
+    try {
+      let lock2 = await libUtil.promisify(libLock.tryLockFile)("index.js", true);
       await libUtil.promisify(libLock.unlockFile)(lock2);
     } catch(e){
       isFail = true;
