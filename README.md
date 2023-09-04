@@ -2,6 +2,8 @@
 
 The package provides locking functions on a file using the flock or LockFileEx function.
 
+Package description page: https://fcf-framework.tech/packages/fcf-framework-lock
+
 ## lockFile(string a_filePath, function a_cb)
 ## lockFile(number a_fileHandle, function a_cb)
 Performs a file lock

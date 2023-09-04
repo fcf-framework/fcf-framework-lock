@@ -7,13 +7,13 @@
     "type": "git",
     "url": "https://github.com/fcf-framework/fcf-framework-lock.git"
   },
+  "homepage": "https://github.com/fcf-framework/fcf-framework-lock#readme",
   "keywords": [
     "fcf",
     "file lock",
     "flock",
     "lock"
   ],
-  "homepage": "https://fcf-framework.tech/packages/fcf-framework-lock",
   "scripts": {
     "test": "node ./tests/tests.js"
   },
