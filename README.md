@@ -70,7 +70,7 @@ Performs a mutex unlock
     - Function signature a_cb: a_cb(Error|undefined a_error)
         - Error|undefined a_error - Error object.
 
-## isLockNamedMutex(string a_filePath, function a_cb)
+## isLockNamedMutex(string a_name, function a_cb)
 Checks whether the named mutex is locked
 - string a_name - The mutex name
 - function a_cb - The function of processing the result of the function execution.
