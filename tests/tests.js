@@ -290,6 +290,10 @@ async function main(){
 
     }
 
+    {
+      await libUtil.promisify(libLock.lockNamedMutex)("123/:\\123@#$%^&*()");
+    }
+
   console.log("Complete");
 
 }
