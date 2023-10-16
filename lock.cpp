@@ -237,10 +237,10 @@ void LockNamedMutexHandler(uv_async_t* a_uvasync) {
   SLockNamedMutex* lockInfo = (SLockNamedMutex*)a_uvasync->data;
   #ifndef WIN32
     if (lockInfo->type != L_UNLOCK) {
-      #ifndef __ANDROID__
-        int fd = shm_open(lockInfo->name.c_str(), O_CREAT | O_RDWR | O_TRUNC, 0666);
-      #else
+      #if defined(__ANDROID__) || defined(__APPLE__)
         int fd = open(lockInfo->name.c_str(), O_CREAT, 0666);
+      #else
+        int fd = shm_open(lockInfo->name.c_str(), O_CREAT | O_RDWR | O_TRUNC, 0666);
       #endif
       if (fd != -1) {
         lockInfo->file       = fd;

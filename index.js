@@ -20,7 +20,7 @@ function getCahceDirectory() {
 }
 
 async function prepareCahceDirectory() {
-  if (libOS.platform() != "android") {
+  if (libOS.platform() != "android" && libOS.platform() != "darwin") {
     return;
   }
   let pathArrOrig = getCahceDirectory().split("/");
@@ -154,7 +154,7 @@ function lockNamedMutex(a_name, a_try, a_cb) {
   let stack = (new Error()).stack;
   try {
     if (typeof a_name == "string") {
-      if (libOS.platform() == "android") {
+      if (libOS.platform() == "android" || && libOS.platform() == "darwin") {
         a_name = getCahceDirectory() + "/"+ a_name;
       }
       call(a_try ? "trylockNamedMutex" : "lockNamedMutex", a_name, stack, a_cb);
