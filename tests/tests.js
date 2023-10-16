@@ -1,6 +1,7 @@
 let libLock = require("../index.js");
 let libUtil = require("util");
 let libFS   = require("fs");
+let libOS   = require("os");
 
 function invalidTest(a_message){
   a_message = a_message || "Invalid test";
@@ -8,14 +9,20 @@ function invalidTest(a_message){
 }
 
 async function main(){
-  /*
-  for(let i = 0; i < 10000000; ++i){
-    let lock = await libUtil.promisify(libLock.lockFile)("index.js");
-    await libUtil.promisify(libLock.isLockFile)("index.js");
-    await libUtil.promisify(libLock.unlockFile)(lock);
-    await libUtil.promisify(libLock.isLockFile)("index.js");
-  };
-  */
+  // while(true){
+  //   {
+  //     let lock = await libUtil.promisify(libLock.lockFile)("index.js");
+  //     await libUtil.promisify(libLock.isLockFile)("index.js");
+  //     await libUtil.promisify(libLock.unlockFile)(lock);
+  //     await libUtil.promisify(libLock.isLockFile)("index.js");
+  //   }
+  //   {
+  //     let lock = await libUtil.promisify(libLock.lockNamedMutex)("index.js");
+  //     await libUtil.promisify(libLock.isLockNamedMutex)("index.js");
+  //     await libUtil.promisify(libLock.unLockNamedMutex)(lock);
+  //     await libUtil.promisify(libLock.isLockNamedMutex)("index.js");
+  //   }
+  // };
 
   // lockFile (by path) && unlockFile
   //
@@ -25,8 +32,14 @@ async function main(){
     for(let i = 0; i < 10; ++i) {
       promises.push(new Promise((a_res, a_rej) => {
         libLock.lockFile("index.js", (a_error, a_lock)=>{
+          if (a_error){
+            invalidTest(a_error);
+          }
           setTimeout(()=>{
             libLock.unlockFile(a_lock, (a_error)=>{
+              if (a_error){
+                invalidTest(a_error);
+              }
               a_res();
             });
           }, 100);
@@ -37,7 +50,7 @@ async function main(){
     await Promise.all(promises);
     let diff = Date.now() - start;
     if (diff < 1000 || diff > 1200){
-      invalidTest(`Lock test on file did not complete in due time (diff < 1000 || diff > 1200)  [diff: ${diff}]`);
+      invalidTest(`(1) Lock test on file did not complete in due time (diff < 1000 || diff > 1200)  [diff: ${diff}]`);
     }
   }
 
@@ -49,10 +62,18 @@ async function main(){
     for(let i = 0; i < 10; ++i) {
       promises.push(new Promise((a_res, a_rej) => {
         libFS.open("index.js", "r", (a_error, a_fd) => {
+          if (a_error){
+            invalidTest(a_error);
+          }
           libLock.lockFile(a_fd, (a_error, a_lock)=>{
+              if (a_error){
+                invalidTest(a_error);
+              }
              setTimeout(()=>{
               libLock.unlockFile(a_lock, (a_error)=>{
-
+                if (a_error){
+                  invalidTest(a_error);
+                }
                 libFS.close(a_fd);
                 a_res();
               });
@@ -65,7 +86,7 @@ async function main(){
     await Promise.all(promises);
     let diff = Date.now() - start;
     if (diff < 1000 || diff > 1200){
-      invalidTest(`Lock test on file did not complete in due time (diff < 1000 || diff > 1200)  [diff: ${diff}]`);
+      invalidTest(`(2) Lock test on file did not complete in due time (diff < 1000 || diff > 1200)  [diff: ${diff}]`);
     }
   }
 
@@ -76,30 +97,30 @@ async function main(){
     let lock = await libUtil.promisify(libLock.lockFile)("index.js");
     try {
       let lock2 = await libUtil.promisify(libLock.tryLockFile)("index.js");
-      isFail = true;
+      isFail = 1;
     } catch(e){
       if (!e.unavailable) {
-        isFail = true;
+        isFail = 2;
       }
     }
     let lock2 = await libUtil.promisify(libLock.tryLockFile)("index.js", true);
     if (lock2 !== undefined) {
-      isFail = true;
+      isFail = 3;
     }
     try {
       let lock2 = await libUtil.promisify(libLock.tryLockFile)("index.js1231231313123");
-      isFail = true;
+      isFail = 4;
     } catch(e){
       if (e.unavailable) {
-        isFail = true;
+        isFail = 5;
       }
     }
     try {
       let lock2 = await libUtil.promisify(libLock.tryLockFile)("index.js1231231313123", true);
-      isFail = true;
+      isFail = 6;
     } catch(e){
       if (e.unavailable) {
-        isFail = true;
+        isFail = 7;
       }
     }
     await libUtil.promisify(libLock.unlockFile)(lock);
@@ -107,16 +128,16 @@ async function main(){
       let lock2 = await libUtil.promisify(libLock.tryLockFile)("index.js");
       await libUtil.promisify(libLock.unlockFile)(lock2);
     } catch(e){
-      isFail = true;
+      isFail = 8;
     }
     try {
       let lock2 = await libUtil.promisify(libLock.tryLockFile)("index.js", true);
       await libUtil.promisify(libLock.unlockFile)(lock2);
     } catch(e){
-      isFail = true;
+      isFail = 9;
     }
     if (isFail){
-      invalidTest("Function tryLockFile has invalid logic");
+      invalidTest(`Function tryLockFile has invalid logic: ${isFail}`);
     }
   }
 
@@ -132,6 +153,128 @@ async function main(){
       invalidTest("Function isLockFile has invalid logic");
     }
   }
+
+
+  // lockNamedMutex && unlockNamedMutex
+  //
+  {
+    let start = Date.now();
+    let promises = [];
+    for(let i = 0; i < 10; ++i) {
+      promises.push(new Promise((a_res, a_rej) => {
+        libLock.lockNamedMutex("FCF_TEST_MUTEX", (a_error, a_lock)=>{
+          if (a_error){
+            invalidTest(a_error);
+          }
+          setTimeout(()=>{
+            libLock.unLockNamedMutex(a_lock, (a_error)=>{
+              if (a_error){
+                invalidTest(a_error);
+              }
+              a_res();
+            });
+          }, 100);
+        })
+      }));
+    }
+
+    await Promise.all(promises);
+    let diff = Date.now() - start;
+    if (diff < 1000 || diff > 1200){
+      invalidTest(`(3) Lock test on file did not complete in due time (diff < 1000 || diff > 1200)  [diff: ${diff}]`);
+    }
+  }
+
+
+
+  // tryLockNamedMutex && unLockNamedMutex
+  //
+  {
+    let mutexName = "FCF_TEST_MUTEX";
+    let errorMutexName = "FCF_TEST_MUTEX/@#$%^&*()_111";
+    errorMutexName = errorMutexName.padEnd(99999,".");
+    let isFail = false;
+    let lock = await libUtil.promisify(libLock.lockNamedMutex)(mutexName);
+    try {
+      let lock2 = await libUtil.promisify(libLock.tryLockNamedMutex)(mutexName);
+      isFail = true;
+    } catch(e){
+      if (!e.unavailable) {
+        isFail = true;
+      }
+    }
+    let lock2 = await libUtil.promisify(libLock.tryLockNamedMutex)(mutexName, true);
+    if (lock2 !== undefined) {
+      isFail = true;
+    }
+    if (libOS.platform != "win32") {
+      try {
+        let lock2 = await libUtil.promisify(libLock.tryLockNamedMutex)(errorMutexName);
+        isFail = true;
+      } catch(e){
+        if (e.unavailable) {
+          isFail = true;
+        }
+      }
+      try {
+        let lock2 = await libUtil.promisify(libLock.tryLockNamedMutex)(errorMutexName, true);
+        isFail = true;
+      } catch(e){
+        if (e.unavailable) {
+          isFail = true;
+        }
+      }
+    }
+    await libUtil.promisify(libLock.unLockNamedMutex)(lock);
+    try {
+      let lock2 = await libUtil.promisify(libLock.tryLockNamedMutex)(mutexName);
+      if (!lock2){
+        isFail = true;
+      }
+      let lock3 = await libUtil.promisify(libLock.tryLockNamedMutex)(mutexName, true);
+      if (lock3){
+        isFail = true;
+      }
+      await libUtil.promisify(libLock.unLockNamedMutex)(lock2);
+    } catch(e){
+      isFail = true;
+    }
+    try {
+      let lock2 = await libUtil.promisify(libLock.tryLockNamedMutex)(mutexName, true);
+      if (!lock2){
+        isFail = true;
+      }
+      let lock3 = await libUtil.promisify(libLock.tryLockNamedMutex)(mutexName, true);
+      if (lock3){
+        isFail = true;
+      }
+      await libUtil.promisify(libLock.unLockNamedMutex)(lock2);
+    } catch(e){
+      isFail = true;
+    }
+    if (isFail){
+      invalidTest("Function tryLockNamedMutex has invalid logic [Line: " + isFail + "]");
+    }
+  }
+
+    // isLockNamedMutex && unLockNamedMutex
+    //
+    {
+      let mutexName = "FCF_TEST_MUTEX";
+      if ((await libUtil.promisify(libLock.isLockNamedMutex)(mutexName))){
+        invalidTest("Function isLockFile has invalid logic");
+      }
+      let lock = await libUtil.promisify(libLock.lockNamedMutex)(mutexName);
+      if (!(await libUtil.promisify(libLock.isLockNamedMutex)(mutexName))){
+        invalidTest("Function isLockFile has invalid logic");
+      }
+      await libUtil.promisify(libLock.unLockNamedMutex)(lock);
+      if (await libUtil.promisify(libLock.isLockNamedMutex)(mutexName)){
+        invalidTest("Function isLockFile has invalid logic");
+      }
+    }
+
+  console.log("Complete");
 
 }
 
