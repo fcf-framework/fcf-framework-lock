@@ -62,6 +62,7 @@ function restoreStack(a_error, a_stack) {
   if (a_error.stack.split("\n").length < 2){
     a_error.stack = a_error.stack + a_stack.substr(a_stack.indexOf("\n"));
   }
+
 }
 
 function call(a_methodName, a_fd, a_restoreStack, a_cb){
@@ -150,14 +151,13 @@ function islock(a_file, a_cb) {
   });
 }
 
-function lockNamedMutex(a_name, a_try, a_cb) {
-  let stack = (new Error()).stack;
+function lockNamedMutex(a_name, a_try, a_stack, a_cb) {
   try {
     if (typeof a_name == "string") {
       if (libOS.platform() == "android" || libOS.platform() == "darwin") {
         a_name = getCahceDirectory() + "/"+ a_name;
       }
-      call(a_try ? "trylockNamedMutex" : "lockNamedMutex", a_name, stack, a_cb);
+      call(a_try ? "trylockNamedMutex" : "lockNamedMutex", a_name, a_stack, a_cb);
     } else {
       throw new Error("The argument is not a string containing the name of mutex");
     }
@@ -166,14 +166,13 @@ function lockNamedMutex(a_name, a_try, a_cb) {
   }
 };
 
-function unLockNamedMutex(a_lock, a_cb) {
-  let stack = (new Error()).stack;
+function unLockNamedMutex(a_lock, a_stack, a_cb) {
   try {
     if (typeof a_lock == "number") {
       if (!a_lock){
         throw new Error("Invalid mutex lock id.");
       }
-      call("unlockNamedMutex", a_lock, stack, a_cb);
+      call("unlockNamedMutex", a_lock, a_stack, a_cb);
     } else {
       throw new Error("The argument is not a number the index of the mutex.");
     }
@@ -182,10 +181,10 @@ function unLockNamedMutex(a_lock, a_cb) {
   }
 };
 
-function isLockNamedMutex(a_name, a_cb) {
-  lockNamedMutex(a_name, true, (a_error, a_lock) => {
+function isLockNamedMutex(a_name, a_stack, a_cb) {
+  lockNamedMutex(a_name, true, a_stack, (a_error, a_lock) => {
     if (!a_error) {
-      unLockNamedMutex(a_lock, (a_error)=>{
+      unLockNamedMutex(a_lock, a_stack, (a_error)=>{
         if (typeof a_cb === "function") {
           a_cb(a_error, false);
         }
@@ -271,9 +270,10 @@ fcf.NLock.isLockFile = (a_file, a_cb) => {
 
 
 fcf.NLock.lockNamedMutex = (a_name, a_cb) => {
+  let stack = (new Error()).stack;
   prepareCahceDirectory()
   .then(()=>{
-    return libUtil.promisify(lockNamedMutex)(a_name, false)
+    return libUtil.promisify(lockNamedMutex)(a_name, false, stack)
   })
   .then((a_res)=>{
     if (typeof a_cb === "function") {
@@ -293,9 +293,10 @@ fcf.NLock.tryLockNamedMutex = (a_file, a_quiet, a_cb) => {
     a_cb = a_quiet;
     a_quiet = false;
   }
+  let stack = (new Error()).stack;
   prepareCahceDirectory()
   .then(()=>{
-    return libUtil.promisify(lockNamedMutex)(a_file, true)
+    return libUtil.promisify(lockNamedMutex)(a_file, true, stack)
   })
   .then((a_res)=>{
     if (typeof a_cb === "function") {
@@ -316,7 +317,8 @@ fcf.NLock.tryLockNamedMutex = (a_file, a_quiet, a_cb) => {
 
 
 fcf.NLock.unlockNamedMutex = (a_lock, a_cb) => {
-  libUtil.promisify(unLockNamedMutex)(a_lock)
+  let stack = (new Error()).stack;
+  libUtil.promisify(unLockNamedMutex)(a_lock, stack)
   .then((a_res)=>{
     if (typeof a_cb === "function") {
       a_cb(undefined, a_res);
@@ -331,9 +333,10 @@ fcf.NLock.unlockNamedMutex = (a_lock, a_cb) => {
 };
 
 fcf.NLock.isLockNamedMutex = (a_name, a_cb) => {
+  let stack = (new Error()).stack;
   prepareCahceDirectory()
   .then(()=>{
-    return libUtil.promisify(isLockNamedMutex)(a_name)
+    return libUtil.promisify(isLockNamedMutex)(a_name, stack)
   })
   .then((a_res)=>{
     if (typeof a_cb === "function") {
