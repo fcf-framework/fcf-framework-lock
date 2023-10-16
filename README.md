@@ -1,6 +1,7 @@
 # fcf-framework-lock
 
-The package provides locking functions on a file using the flock or LockFileEx function.
+Packet provides functions for locking on a file and named mutexes.
+The package is compatible with UNIX systems and Windows.
 
 Package description page: https://fcf-framework.tech/packages/fcf-framework-lock
 

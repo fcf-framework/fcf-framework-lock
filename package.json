@@ -12,7 +12,11 @@
     "fcf",
     "file lock",
     "flock",
-    "lock"
+    "LockFileEx",
+    "lock",
+    "CreateMutex",
+    "named mutex",
+    "mutex"
   ],
   "scripts": {
     "test": "node ./tests/tests.js"
