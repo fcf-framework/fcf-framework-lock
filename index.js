@@ -16,7 +16,7 @@ if (!fcf.NLock) {
 module.exports = fcf.NLock;
 
 function getSafeName(a_name){
-  a_name = a_name.replace(/[\/:]/g, (a_match) => {
+  a_name = a_name.replace(/[\\\/:<>\"?*|]/g, (a_match) => {
     return "@" + a_match.charCodeAt(0)+";";
   });
   return a_name;
