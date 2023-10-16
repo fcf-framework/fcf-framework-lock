@@ -264,7 +264,7 @@ fcf.NLock.tryLockNamedMutex = (a_file, a_quiet, a_cb) => {
 };
 
 
-fcf.NLock.unLockNamedMutex = (a_lock, a_cb) => {
+fcf.NLock.unlockNamedMutex = (a_lock, a_cb) => {
   libUtil.promisify(unLockNamedMutex)(a_lock)
   .then((a_res)=>{
     if (typeof a_cb === "function") {

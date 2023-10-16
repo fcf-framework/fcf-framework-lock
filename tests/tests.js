@@ -19,7 +19,7 @@ async function main(){
   //   {
   //     let lock = await libUtil.promisify(libLock.lockNamedMutex)("index.js");
   //     await libUtil.promisify(libLock.isLockNamedMutex)("index.js");
-  //     await libUtil.promisify(libLock.unLockNamedMutex)(lock);
+  //     await libUtil.promisify(libLock.unlockNamedMutex)(lock);
   //     await libUtil.promisify(libLock.isLockNamedMutex)("index.js");
   //   }
   // };
@@ -167,7 +167,7 @@ async function main(){
             invalidTest(a_error);
           }
           setTimeout(()=>{
-            libLock.unLockNamedMutex(a_lock, (a_error)=>{
+            libLock.unlockNamedMutex(a_lock, (a_error)=>{
               if (a_error){
                 invalidTest(a_error);
               }
@@ -187,7 +187,7 @@ async function main(){
 
 
 
-  // tryLockNamedMutex && unLockNamedMutex
+  // tryLockNamedMutex && unlockNamedMutex
   //
   {
     let mutexName = "FCF_TEST_MUTEX";
@@ -225,7 +225,7 @@ async function main(){
         }
       }
     }
-    await libUtil.promisify(libLock.unLockNamedMutex)(lock);
+    await libUtil.promisify(libLock.unlockNamedMutex)(lock);
     try {
       let lock2 = await libUtil.promisify(libLock.tryLockNamedMutex)(mutexName);
       if (!lock2){
@@ -235,7 +235,7 @@ async function main(){
       if (lock3){
         isFail = true;
       }
-      await libUtil.promisify(libLock.unLockNamedMutex)(lock2);
+      await libUtil.promisify(libLock.unlockNamedMutex)(lock2);
     } catch(e){
       isFail = true;
     }
@@ -248,7 +248,7 @@ async function main(){
       if (lock3){
         isFail = true;
       }
-      await libUtil.promisify(libLock.unLockNamedMutex)(lock2);
+      await libUtil.promisify(libLock.unlockNamedMutex)(lock2);
     } catch(e){
       isFail = true;
     }
@@ -257,7 +257,7 @@ async function main(){
     }
   }
 
-    // isLockNamedMutex && unLockNamedMutex
+    // isLockNamedMutex && unlockNamedMutex
     //
     {
       let mutexName = "FCF_TEST_MUTEX";
@@ -268,7 +268,7 @@ async function main(){
       if (!(await libUtil.promisify(libLock.isLockNamedMutex)(mutexName))){
         invalidTest("Function isLockFile has invalid logic");
       }
-      await libUtil.promisify(libLock.unLockNamedMutex)(lock);
+      await libUtil.promisify(libLock.unlockNamedMutex)(lock);
       if (await libUtil.promisify(libLock.isLockNamedMutex)(mutexName)){
         invalidTest("Function isLockFile has invalid logic");
       }
