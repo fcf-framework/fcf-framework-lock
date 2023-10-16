@@ -15,6 +15,13 @@ if (!fcf.NLock) {
 
 module.exports = fcf.NLock;
 
+function getSafeName(a_name){
+  a_name = a_name.replace(/[\/:]/g, (a_match) => {
+    return "@" + a_match.charCodeAt(0)+";";
+  });
+  return a_name;
+}
+
 function getCahceDirectory() {
   return (libOS.tmpdir() + "/fcf-framework/namedmutex").replace(/\\/g, "/").replace(/[\/]+/g, "/");
 }
@@ -154,6 +161,7 @@ function islock(a_file, a_cb) {
 function lockNamedMutex(a_name, a_try, a_stack, a_cb) {
   try {
     if (typeof a_name == "string") {
+      a_name = getSafeName(a_name);
       if (libOS.platform() == "android" || libOS.platform() == "darwin") {
         a_name = getCahceDirectory() + "/"+ a_name;
       }
