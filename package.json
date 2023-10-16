@@ -1,6 +1,6 @@
 {
   "name": "fcf-framework-lock",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Provides lock functionality on a file",
   "main": "index.js",
   "repository": {
