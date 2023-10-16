@@ -1,4 +1,5 @@
 let libFS   = require("fs");
+let libOS   = require("os");
 let libUtil = require("util");
 let libLock = require("./build/Release/lock");
 
@@ -13,6 +14,47 @@ if (!fcf.NLock) {
 }
 
 module.exports = fcf.NLock;
+
+function getCahceDirectory() {
+  return (libOS.tmpdir() + "/fcf-framework/namedmutex").replace(/\\/g, "/").replace(/[\/]+/g, "/");
+}
+
+async function prepareCahceDirectory() {
+  if (libOS.platform() != "android") {
+    return;
+  }
+  let pathArrOrig = getCahceDirectory().split("/");
+  let pathArr     = [...pathArrOrig];
+  while(pathArr.length){
+    let path = pathArr.join("/");
+    let state;
+    try {
+      state = await libUtil.promisify(libFS.stat)(path);
+    } catch(e){
+    }
+    if (state && state.isDirectory()) {
+      break;
+    } else {
+      pathArr.pop();
+    }
+  }
+  while(pathArr.length != pathArrOrig.length) {
+    pathArr.push(pathArrOrig[pathArr.length]);
+    let path = pathArr.join("/");
+    try {
+      await libUtil.promisify(libFS.mkdir)(path);
+    } catch(error){
+      let state;
+      try {
+        state = await libUtil.promisify(libFS.stat)(path);
+      } catch(stateError){
+      }
+      if (!state || !state.isDirectory()) {
+        throw error;
+      }
+    }
+  }
+}
 
 const stAfterClose = {};
 
@@ -112,6 +154,9 @@ function lockNamedMutex(a_name, a_try, a_cb) {
   let stack = (new Error()).stack;
   try {
     if (typeof a_name == "string") {
+      if (libOS.platform() == "android") {
+        a_name = getCahceDirectory() + "/"+ a_name;
+      }
       call(a_try ? "trylockNamedMutex" : "lockNamedMutex", a_name, stack, a_cb);
     } else {
       throw new Error("The argument is not a string containing the name of mutex");
@@ -226,7 +271,10 @@ fcf.NLock.isLockFile = (a_file, a_cb) => {
 
 
 fcf.NLock.lockNamedMutex = (a_name, a_cb) => {
-  libUtil.promisify(lockNamedMutex)(a_name, false)
+  prepareCahceDirectory()
+  .then(()=>{
+    return libUtil.promisify(lockNamedMutex)(a_name, false)
+  })
   .then((a_res)=>{
     if (typeof a_cb === "function") {
       a_cb(undefined, a_res);
@@ -245,7 +293,10 @@ fcf.NLock.tryLockNamedMutex = (a_file, a_quiet, a_cb) => {
     a_cb = a_quiet;
     a_quiet = false;
   }
-  libUtil.promisify(lockNamedMutex)(a_file, true)
+  prepareCahceDirectory()
+  .then(()=>{
+    return libUtil.promisify(lockNamedMutex)(a_file, true)
+  })
   .then((a_res)=>{
     if (typeof a_cb === "function") {
       a_cb(undefined, a_res);
@@ -280,7 +331,10 @@ fcf.NLock.unlockNamedMutex = (a_lock, a_cb) => {
 };
 
 fcf.NLock.isLockNamedMutex = (a_name, a_cb) => {
-  libUtil.promisify(isLockNamedMutex)(a_name)
+  prepareCahceDirectory()
+  .then(()=>{
+    return libUtil.promisify(isLockNamedMutex)(a_name)
+  })
   .then((a_res)=>{
     if (typeof a_cb === "function") {
       a_cb(undefined, a_res);

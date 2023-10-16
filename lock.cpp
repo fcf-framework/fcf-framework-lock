@@ -7,6 +7,7 @@
 #include <mutex>
 #include <condition_variable>
 #ifndef WIN32
+  #include <unistd.h>
   #include <sys/file.h>
   #include <sys/mman.h>
   #include <sys/stat.h>
@@ -236,11 +237,14 @@ void LockNamedMutexHandler(uv_async_t* a_uvasync) {
   SLockNamedMutex* lockInfo = (SLockNamedMutex*)a_uvasync->data;
   #ifndef WIN32
     if (lockInfo->type != L_UNLOCK) {
-      const unsigned int mode = S_IRWXU | S_IRWXG | S_IRWXO;
-      int shm_id = shm_open(lockInfo->name.c_str(), O_CREAT | O_RDWR | O_TRUNC, mode);
-      if (shm_id != -1) {
-        lockInfo->file       = shm_id;
-        lockInfo->fileNumber = shm_id ? shm_id : -1;
+      #ifndef __ANDROID__
+        int fd = shm_open(lockInfo->name.c_str(), O_CREAT | O_RDWR | O_TRUNC, 0666);
+      #else
+        int fd = open(lockInfo->name.c_str(), O_CREAT, 0666);
+      #endif
+      if (fd != -1) {
+        lockInfo->file       = fd;
+        lockInfo->fileNumber = fd ? fd : -1;
       } else {
         lockInfo->error = getErrorMessage();
       }

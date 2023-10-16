@@ -274,6 +274,22 @@ async function main(){
       }
     }
 
+    {
+      let mutexName1 = "FCF_TEST_MUTEX1";
+      let mutexName2 = "FCF_TEST_MUTEX2";
+
+      await libUtil.promisify(libLock.lockNamedMutex)(mutexName1);
+      await libUtil.promisify(libLock.lockNamedMutex)(mutexName2);
+
+      if (!(await libUtil.promisify(libLock.isLockNamedMutex)(mutexName1))){
+        invalidTest("Function isLockFile has invalid logic");
+      }
+      if (!(await libUtil.promisify(libLock.isLockNamedMutex)(mutexName2))){
+        invalidTest("Function isLockFile has invalid logic");
+      }
+
+    }
+
   console.log("Complete");
 
 }
