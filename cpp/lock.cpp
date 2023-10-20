@@ -1,3 +1,9 @@
+#ifndef WIN32
+  #pragma GCC diagnostic ignored "-Wunused-result"
+#else
+  #pragma warning( disable : 4996 )
+#endif
+
 #include <iostream>
 #include <map>
 #include <memory>
@@ -12,12 +18,12 @@
   #include <sys/mman.h>
   #include <sys/stat.h>
   #include <fcntl.h>
-  #pragma GCC diagnostic ignored "-Wunused-result"
 #else
   #include <windows.h>
   #include <codecvt>
-  #pragma warning( disable : 4996 )
 #endif
+
+#include "NamedMutex.hpp"
 
 
 #ifndef WIN32
@@ -48,76 +54,21 @@ struct SLock {
 struct SLockNamedMutex {
   ELock                         type;
   std::string                   name;
-  THandle                       file;
+  std::string                   cacheDirectory;
   int                           fileNumber;
   v8::Persistent<v8::Function>  callback;
   v8::Isolate*                  isolate;
   std::string                   error;
   bool                          unavailable;
-  SLockNamedMutex(ELock a_type, const std::string& a_name, THandle a_file, int a_fileNumber, v8::Local<v8::Function> a_callback, v8::Isolate* a_isolate)
-    : type(a_type), name(a_name), file(a_file), fileNumber(a_fileNumber), callback(a_isolate, a_callback), isolate(a_isolate), unavailable(false) {
+  SLockNamedMutex(ELock a_type, const std::string& a_name, const std::string& a_cacheDirectory, int a_fileNumber, v8::Local<v8::Function> a_callback, v8::Isolate* a_isolate)
+    : type(a_type), name(a_name), cacheDirectory(a_cacheDirectory), fileNumber(a_fileNumber), callback(a_isolate, a_callback), isolate(a_isolate), unavailable(false) {
   }
 };
 
+namespace {
+  NamedMutex namedMutexLocker;
+}
 
-#ifdef WIN32
-
-struct LockNamedMutexInfo{
-  std::mutex              mutex;
-  std::condition_variable condition;
-  bool                    wait;
-  THandle                 handle;
-};
-
-typedef std::shared_ptr<LockNamedMutexInfo> PLockNamedMutexInfo;
-
-class LockNMStorage{
-public:
-  LockNMStorage()
-    : _c(0) {
-  }
-
-  int set(PLockNamedMutexInfo a_info){
-    std::lock_guard<std::mutex> guard(_m);
-    while(true){
-      ++_c;
-      if (_c < 0){
-        _c = 0;
-        continue;
-      }
-      if (_s.find(_c) != _s.end()){
-        continue;
-      }
-      break;
-    }
-    _s[_c] = a_info;
-    return _c;
-  }
-
-  PLockNamedMutexInfo get(int a_key){
-    std::lock_guard<std::mutex> guard(_m);
-    std::map<int, PLockNamedMutexInfo>::iterator it = _s.find(a_key);
-    return it != _s.end() ? it->second : 0;
-  }
-
-  void remove(int a_key) {
-    std::lock_guard<std::mutex> guard(_m);
-    _s.erase(a_key);
-    if (a_key == _c) {
-      while(_c > 0 && _s.find(_c) == _s.end()) {
-        --_c;
-      }
-    }
-  }
-
-private:
-  int                                _c;
-  std::map<int, PLockNamedMutexInfo> _s;
-  std::mutex                         _m;
-};
-
-LockNMStorage lockNMStorage;
-#endif
 
 std::string getErrorMessage() {
   #ifndef WIN32
@@ -235,123 +186,81 @@ void Lock(const v8::FunctionCallbackInfo<v8::Value>& a_args) {
 
 void LockNamedMutexHandler(uv_async_t* a_uvasync) {
   SLockNamedMutex* lockInfo = (SLockNamedMutex*)a_uvasync->data;
-  #ifndef WIN32
-    if (lockInfo->type != L_UNLOCK) {
-      #if defined(__ANDROID__) || defined(__APPLE__)
-        int fd = open(lockInfo->name.c_str(), O_CREAT, 0666);
-      #else
-        int fd = shm_open(lockInfo->name.c_str(), O_CREAT | O_RDWR | O_TRUNC, 0666);
-      #endif
-      if (fd != -1) {
-        lockInfo->file       = fd;
-        lockInfo->fileNumber = fd ? fd : -1;
-      } else {
-        lockInfo->error = getErrorMessage();
-      }
-    }
 
-    if (lockInfo->error.empty()) {
-      int lockMode = lockInfo->type == L_LOCK    ? LOCK_EX :
-                     lockInfo->type == L_TRYLOCK ? LOCK_NB|LOCK_EX:
-    	                                             LOCK_UN;
-      int res = flock(lockInfo->file, lockMode);
-      if (res  && errno == EWOULDBLOCK && lockInfo->type == L_TRYLOCK) {
-        lockInfo->unavailable = true;
-        lockInfo->error = "Resource temporarily unavailable";
-      } else if (res){
-        lockInfo->error = getErrorMessage();
-      }
-    }
-
-    if (!lockInfo->error.empty() || lockInfo->type == L_UNLOCK) {
-      close(lockInfo->file);
-      lockInfo->file = -1;
-      lockInfo->fileNumber = 0;
-    }
-    uv_async_send(a_uvasync);
-  #else
-    if (lockInfo->type == L_LOCK || lockInfo->type == L_TRYLOCK) {
-      PLockNamedMutexInfo info;
-      do {
-        std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
-        std::wstring wname(conv.from_bytes(lockInfo->name));
-        lockInfo->file = CreateMutexW(NULL, FALSE, wname.c_str());
-        if (!lockInfo->file){
-          lockInfo->error = getErrorMessage();
-          break;
-        }
-        DWORD res = WaitForSingleObject(lockInfo->file, lockInfo->type == L_TRYLOCK ? 0 : INFINITE);
-        if (res != WAIT_OBJECT_0 && res != WAIT_ABANDONED) {
-          if (res == WAIT_TIMEOUT) {
+  if (lockInfo->type == L_LOCK || lockInfo->type == L_TRYLOCK) {
+    try {
+      namedMutexLocker.lock(
+        lockInfo->name.c_str(),
+        lockInfo->type == L_TRYLOCK,
+        lockInfo->cacheDirectory.c_str(),
+        [lockInfo, a_uvasync](int a_lock){
+          if (a_lock){
+            lockInfo->fileNumber = a_lock;
+          } else {
             lockInfo->unavailable = true;
             lockInfo->error = "Resource temporarily unavailable";
-          } else {
-            lockInfo->error = getErrorMessage();
           }
-          CloseHandle(lockInfo->file);
-          lockInfo->file = 0;
-          break;
+          uv_async_send(a_uvasync);
         }
-        info.reset(new LockNamedMutexInfo());
-        info->handle = lockInfo->file;
-        info->wait   = true;
-        lockInfo->fileNumber = lockNMStorage.set(info);
-      } while(false);
-      uv_async_send(a_uvasync);
-      if (info.get()){
-        std::unique_lock lock(info->mutex);
-        if (info->wait){
-          info->condition.wait(lock);
-        }
-        ReleaseMutex(info->handle);
-        CloseHandle(info->handle);
-      }
-    } else {
-      PLockNamedMutexInfo info = lockNMStorage.get(lockInfo->fileNumber);
-      lockNMStorage.remove(lockInfo->fileNumber);
-      lockInfo->file = 0;
-      lockInfo->fileNumber = 0;
-      if (info.get()){
-        std::unique_lock lock(info->mutex);
-        info->wait = false;
-        info->condition.notify_all();
-      }
+      );
+    } catch(const std::exception& e) {
+      lockInfo->error = e.what();
       uv_async_send(a_uvasync);
     }
-  #endif
+  } else {
+    try {
+      namedMutexLocker.unlock(lockInfo->fileNumber);
+      uv_async_send(a_uvasync);
+    } catch(const std::exception& e) {
+      lockInfo->error = e.what();
+      uv_async_send(a_uvasync);
+    }
+  }
 }
 
 
 template <ELock LOCK>
 void LockNamedMutex(const v8::FunctionCallbackInfo<v8::Value>& a_args) {
   v8::Isolate* isolate = v8::Isolate::GetCurrent();
+  std::string              name;
+  std::string              cacheDirectory;
+  int                      fileNumber = 0;
+  v8::Local<v8::Function>  callback;
 
-  if (
-        a_args.Length() < 2 ||
-        ((LOCK == L_LOCK || LOCK == L_TRYLOCK) && !a_args[0]->IsString()) ||
-        ((LOCK == L_UNLOCK) && !a_args[0]->IsNumber()) ||
-        !a_args[1]->IsFunction()
-     ) {
-    v8::Local<v8::String> msg(v8::String::NewFromUtf8Literal(isolate, "Wrong arguments"));
-    isolate->ThrowException(v8::Exception::TypeError(msg));
-    return;
+  if (LOCK == L_LOCK || LOCK == L_TRYLOCK) {
+    if (
+          a_args.Length() < 3 ||
+          !a_args[0]->IsString() ||
+          !a_args[1]->IsString() ||
+          !a_args[2]->IsFunction()
+       ) {
+      v8::Local<v8::String> msg(v8::String::NewFromUtf8Literal(isolate, "Wrong arguments"));
+      isolate->ThrowException(v8::Exception::TypeError(msg));
+      return;
+    }
+    name            = std::string(*v8::String::Utf8Value(isolate, a_args[0]));
+    cacheDirectory  = std::string(*v8::String::Utf8Value(isolate, a_args[1]));
+    callback        = v8::Local<v8::Function>::Cast(a_args[2]);
+  } else {
+    if (
+          a_args.Length() < 2 ||
+          !a_args[0]->IsNumber() ||
+          !a_args[1]->IsFunction()
+       ) {
+      v8::Local<v8::String> msg(v8::String::NewFromUtf8Literal(isolate, "Wrong arguments"));
+      isolate->ThrowException(v8::Exception::TypeError(msg));
+      return;
+    }
+    fileNumber      = v8::Local<v8::Int32>::Cast(a_args[0])->Value();
+    callback        = v8::Local<v8::Function>::Cast(a_args[1]);
   }
-
-  std::string name        = LOCK == L_LOCK || LOCK == L_TRYLOCK ? std::string(*v8::String::Utf8Value(isolate, a_args[0])) : std::string();
-  int         fileNumber  = LOCK == L_UNLOCK ? v8::Local<v8::Int32>::Cast(a_args[0])->Value() : 0;
-  #ifndef WIN32
-    THandle file = fileNumber == -1 ? 0 : fileNumber;
-  #else
-    THandle file = 0;
-  #endif
-
   SLockNamedMutex* lockInfo = new SLockNamedMutex(LOCK,
-                              name,
-                              file,
-                              fileNumber,
-                              v8::Local<v8::Function>::Cast(a_args[1]),
-                              isolate
-                              );
+                                                  name,
+                                                  cacheDirectory,
+                                                  fileNumber,
+                                                  callback,
+                                                  isolate
+                                                  );
   uv_async_t* uvasync = new uv_async_t();
   uv_async_init(uv_default_loop(), uvasync, Complete<SLockNamedMutex>);
   uvasync->data = lockInfo;
@@ -363,9 +272,9 @@ void LockNamedMutex(const v8::FunctionCallbackInfo<v8::Value>& a_args) {
 
 
 void Init(v8::Local<v8::Object> a_exports, v8::Local<v8::Value> a_module, void* a_priv) {
-  NODE_SET_METHOD(a_exports, "lock", Lock<L_LOCK>);
-  NODE_SET_METHOD(a_exports, "unlock", Lock<L_UNLOCK>);
-  NODE_SET_METHOD(a_exports, "trylock", Lock<L_TRYLOCK>);
+  NODE_SET_METHOD(a_exports, "lockFile", Lock<L_LOCK>);
+  NODE_SET_METHOD(a_exports, "unlockFile", Lock<L_UNLOCK>);
+  NODE_SET_METHOD(a_exports, "trylockFile", Lock<L_TRYLOCK>);
   NODE_SET_METHOD(a_exports, "lockNamedMutex", LockNamedMutex<L_LOCK>);
   NODE_SET_METHOD(a_exports, "unlockNamedMutex", LockNamedMutex<L_UNLOCK>);
   NODE_SET_METHOD(a_exports, "trylockNamedMutex", LockNamedMutex<L_TRYLOCK>);

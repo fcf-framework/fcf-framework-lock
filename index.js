@@ -1,6 +1,7 @@
 let libFS   = require("fs");
 let libOS   = require("os");
 let libUtil = require("util");
+let libPath = require("path");
 let libLock = require("./build/Release/lock");
 
 let fcf = typeof global !== 'undefined' && global.fcf ? global.fcf
@@ -15,52 +16,8 @@ if (!fcf.NLock) {
 
 module.exports = fcf.NLock;
 
-function getSafeName(a_name){
-  a_name = a_name.replace(/[\\\/:<>\"?*|]/g, (a_match) => {
-    return "@" + a_match.charCodeAt(0)+";";
-  });
-  return a_name;
-}
-
 function getCahceDirectory() {
-  return (libOS.tmpdir() + "/fcf-framework/namedmutex").replace(/\\/g, "/").replace(/[\/]+/g, "/");
-}
-
-async function prepareCahceDirectory() {
-  if (libOS.platform() != "android" && libOS.platform() != "darwin") {
-    return;
-  }
-  let pathArrOrig = getCahceDirectory().split("/");
-  let pathArr     = [...pathArrOrig];
-  while(pathArr.length){
-    let path = pathArr.join("/");
-    let state;
-    try {
-      state = await libUtil.promisify(libFS.stat)(path);
-    } catch(e){
-    }
-    if (state && state.isDirectory()) {
-      break;
-    } else {
-      pathArr.pop();
-    }
-  }
-  while(pathArr.length != pathArrOrig.length) {
-    pathArr.push(pathArrOrig[pathArr.length]);
-    let path = pathArr.join("/");
-    try {
-      await libUtil.promisify(libFS.mkdir)(path);
-    } catch(error){
-      let state;
-      try {
-        state = await libUtil.promisify(libFS.stat)(path);
-      } catch(stateError){
-      }
-      if (!state || !state.isDirectory()) {
-        throw error;
-      }
-    }
-  }
+  return libPath.join(libOS.tmpdir(), "fcf-framework", "namedmutex");
 }
 
 const stAfterClose = {};
@@ -69,7 +26,6 @@ function restoreStack(a_error, a_stack) {
   if (a_error.stack.split("\n").length < 2){
     a_error.stack = a_error.stack + a_stack.substr(a_stack.indexOf("\n"));
   }
-
 }
 
 function call(a_methodName, a_fd, a_restoreStack, a_cb){
@@ -86,7 +42,7 @@ function call(a_methodName, a_fd, a_restoreStack, a_cb){
   });
 }
 
-function lock(a_file, a_try, a_cb) {
+function lockFile(a_file, a_try, a_cb) {
   let stack = (new Error()).stack;
   try {
     if (typeof a_file == "string") {
@@ -95,7 +51,7 @@ function lock(a_file, a_try, a_cb) {
           restoreStack(a_error, stack);
           a_cb(a_error);
         } else {
-          call(a_try ? "trylock" : "lock", a_fd, stack, (a_error, a_lock)=>{
+          call(a_try ? "trylockFile" : "lockFile", a_fd, stack, (a_error, a_lock)=>{
             if (a_error) {
               libFS.close(a_fd, ()=>{
                 a_cb(a_error);
@@ -108,7 +64,7 @@ function lock(a_file, a_try, a_cb) {
         }
       });
     } else if (typeof a_file == "number") {
-      call(a_try ? "trylock" : "lock", a_file, stack, a_cb);
+      call(a_try ? "trylockFile" : "lockFile", a_file, stack, a_cb);
     } else {
       throw new Error("The argument is not a lock file handle or a string containing the file path");
     }
@@ -117,7 +73,7 @@ function lock(a_file, a_try, a_cb) {
   }
 };
 
-function unlock(a_lock, a_cb) {
+function unlockFile(a_lock, a_cb) {
   let stack = (new Error()).stack;
   function completeLock(a_error) {
     if (a_lock in stAfterClose) {
@@ -136,63 +92,16 @@ function unlock(a_lock, a_cb) {
   }
 
   try {
-    call("unlock", a_lock, stack, completeLock);
+    call("unlockFile", a_lock, stack, completeLock);
   } catch(e){
     completeLock(e);
   }
 }
 
-function islock(a_file, a_cb) {
-  lock(a_file, true, (a_error, a_lock) => {
+function islockFile(a_file, a_cb) {
+  lockFile(a_file, true, (a_error, a_lock) => {
     if (!a_error) {
-      unlock(a_lock, (a_error)=>{
-        if (typeof a_cb === "function") {
-          a_cb(a_error, false);
-        }
-      });
-    } else if (a_error.unavailable){
-      a_cb(undefined, true);
-    } else {
-      a_cb(a_error);
-    }
-  });
-}
-
-function lockNamedMutex(a_name, a_try, a_stack, a_cb) {
-  try {
-    if (typeof a_name == "string") {
-      a_name = getSafeName(a_name);
-      if (libOS.platform() == "android" || libOS.platform() == "darwin") {
-        a_name = getCahceDirectory() + "/"+ a_name;
-      }
-      call(a_try ? "trylockNamedMutex" : "lockNamedMutex", a_name, a_stack, a_cb);
-    } else {
-      throw new Error("The argument is not a string containing the name of mutex");
-    }
-  } catch(e) {
-    a_cb(e);
-  }
-};
-
-function unLockNamedMutex(a_lock, a_stack, a_cb) {
-  try {
-    if (typeof a_lock == "number") {
-      if (!a_lock){
-        throw new Error("Invalid mutex lock id.");
-      }
-      call("unlockNamedMutex", a_lock, a_stack, a_cb);
-    } else {
-      throw new Error("The argument is not a number the index of the mutex.");
-    }
-  } catch(e) {
-    a_cb(e);
-  }
-};
-
-function isLockNamedMutex(a_name, a_stack, a_cb) {
-  lockNamedMutex(a_name, true, a_stack, (a_error, a_lock) => {
-    if (!a_error) {
-      unLockNamedMutex(a_lock, a_stack, (a_error)=>{
+      unlockFile(a_lock, (a_error)=>{
         if (typeof a_cb === "function") {
           a_cb(a_error, false);
         }
@@ -207,7 +116,7 @@ function isLockNamedMutex(a_name, a_stack, a_cb) {
 
 
 fcf.NLock.lockFile = (a_file, a_cb) => {
-  libUtil.promisify(lock)(a_file, false)
+  libUtil.promisify(lockFile)(a_file, false)
   .then((a_res)=>{
     if (typeof a_cb === "function") {
       a_cb(undefined, a_res);
@@ -226,7 +135,7 @@ fcf.NLock.tryLockFile = (a_file, a_quiet, a_cb) => {
     a_cb = a_quiet;
     a_quiet = false;
   }
-  libUtil.promisify(lock)(a_file, true)
+  libUtil.promisify(lockFile)(a_file, true)
   .then((a_res)=>{
     if (typeof a_cb === "function") {
       a_cb(undefined, a_res);
@@ -246,7 +155,7 @@ fcf.NLock.tryLockFile = (a_file, a_quiet, a_cb) => {
 };
 
 fcf.NLock.unlockFile = (a_lock, a_cb) => {
-  libUtil.promisify(unlock)(a_lock)
+  libUtil.promisify(unlockFile)(a_lock)
   .then((a_res)=>{
     if (typeof a_cb === "function") {
       a_cb(undefined, a_res);
@@ -262,7 +171,7 @@ fcf.NLock.unlockFile = (a_lock, a_cb) => {
 };
 
 fcf.NLock.isLockFile = (a_file, a_cb) => {
-  libUtil.promisify(islock)(a_file)
+  libUtil.promisify(islockFile)(a_file)
   .then((a_res)=>{
     if (typeof a_cb === "function") {
       a_cb(undefined, a_res);
@@ -279,82 +188,111 @@ fcf.NLock.isLockFile = (a_file, a_cb) => {
 
 fcf.NLock.lockNamedMutex = (a_name, a_cb) => {
   let stack = (new Error()).stack;
-  prepareCahceDirectory()
-  .then(()=>{
-    return libUtil.promisify(lockNamedMutex)(a_name, false, stack)
-  })
-  .then((a_res)=>{
-    if (typeof a_cb === "function") {
-      a_cb(undefined, a_res);
-    }
-    return a_res;
+  a_cb = typeof a_cb == "function" ? a_cb : ()=>{};
+  if (typeof a_name != "string" || !a_name || a_name == "." || a_name == "..") {
+    a_cb(new Error("The argument is not a string containing the name of mutex"));
+    return;
+  }
+  new Promise((a_res, a_rej)=>{
+    libLock.lockNamedMutex(a_name, getCahceDirectory(), (a_error, a_lock)=>{
+      if (a_error) {
+        a_rej(a_error);
+      } else {
+        a_res(a_lock);
+      }
+    });
   })
   .catch((a_error)=>{
-    if (typeof a_cb === "function") {
-      a_cb(a_error);
-    }
-   });
+    restoreStack(a_error, stack);
+    a_cb(a_error);
+  })
+  .then((a_lock)=>{
+    a_cb(undefined, a_lock);
+  })
+  .catch((a_error)=>{
+  });
 };
 
-fcf.NLock.tryLockNamedMutex = (a_file, a_quiet, a_cb) => {
+fcf.NLock.tryLockNamedMutex = (a_name, a_quiet, a_cb) => {
   if (typeof a_quiet == "function") {
     a_cb = a_quiet;
     a_quiet = false;
   }
+  a_cb = typeof a_cb == "function" ? a_cb : ()=>{};
+  if (typeof a_name != "string" || !a_name || a_name == "." || a_name == "..") {
+    a_cb(new Error("The argument is not a string containing the name of mutex"));
+    return;
+  }
   let stack = (new Error()).stack;
-  prepareCahceDirectory()
-  .then(()=>{
-    return libUtil.promisify(lockNamedMutex)(a_file, true, stack)
-  })
-  .then((a_res)=>{
-    if (typeof a_cb === "function") {
-      a_cb(undefined, a_res);
-    }
-    return a_res;
+  new Promise((a_res, a_rej)=>{
+    libLock.trylockNamedMutex(a_name, getCahceDirectory(), (a_error, a_lock, a_unavailable)=>{
+      if (a_unavailable) {
+        a_error.unavailable = a_unavailable;
+        if (a_quiet) {
+          a_res(a_lock);
+        } else {
+          a_rej(a_error);
+        }
+      } else if (!a_error) {
+        a_res(a_lock);
+      } else {
+        a_rej(a_error);
+      }
+    });
   })
   .catch((a_error)=>{
-    if (typeof a_cb === "function") {
-      if (a_quiet && a_error.unavailable){
-        a_cb(undefined, undefined);
-      } else {
-        a_cb(a_error);
-      }
-    }
+    restoreStack(a_error, stack);
+    a_cb(a_error);
+  })
+  .then((a_lock)=>{
+    a_cb(undefined, a_lock);
+  })
+  .catch((a_error)=>{
   });
 };
 
 
 fcf.NLock.unlockNamedMutex = (a_lock, a_cb) => {
   let stack = (new Error()).stack;
-  libUtil.promisify(unLockNamedMutex)(a_lock, stack)
-  .then((a_res)=>{
-    if (typeof a_cb === "function") {
-      a_cb(undefined, a_res);
-    }
-    return a_res;
+  a_cb = typeof a_cb == "function" ? a_cb : ()=>{};
+  if (typeof a_lock != "number" || !a_lock) {
+    a_cb(new Error("The argument is not a lock index containing the mutex name"));
+    return;
+  }
+  new Promise((a_res, a_rej)=>{
+    libLock.unlockNamedMutex(a_lock, (a_error, a_lock)=>{
+      if (a_error) {
+        a_rej(a_error);
+      } else {
+        a_res(a_lock);
+      }
+    });
   })
   .catch((a_error)=>{
-    if (typeof a_cb === "function") {
-      a_cb(a_error);
-    }
-   });
+    restoreStack(a_error, stack);
+    a_cb(a_error);
+  })
+  .then((a_lock)=>{
+    a_cb(undefined, a_lock);
+  })
+  .catch((a_error)=>{
+  });
 };
 
+
 fcf.NLock.isLockNamedMutex = (a_name, a_cb) => {
-  let stack = (new Error()).stack;
-  prepareCahceDirectory()
-  .then(()=>{
-    return libUtil.promisify(isLockNamedMutex)(a_name, stack)
-  })
-  .then((a_res)=>{
-    if (typeof a_cb === "function") {
-      a_cb(undefined, a_res);
-    }
-    return a_res;
-  })
-  .catch((a_error)=>{
-    if (typeof a_cb === "function") {
+  a_cb = typeof a_cb == "function" ? a_cb : ()=>{};
+  fcf.NLock.tryLockNamedMutex(a_name, true, (a_error, a_lock) => {
+    if (!a_error) {
+      if (a_lock) {
+        fcf.NLock.unlockNamedMutex(a_lock, (a_error)=>{
+          a_cb(undefined, false);
+        });
+      } else {
+        a_cb(undefined, true);
+      }
+    } else {
       a_cb(a_error);
     }
-   });
+  });
 };
