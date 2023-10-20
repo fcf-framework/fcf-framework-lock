@@ -1,13 +1,13 @@
 {
   "name": "fcf-framework-lock",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "description": "Provides file locking and named mutex functionality",
   "main": "index.js",
   "repository": {
     "type": "git",
     "url": "https://github.com/fcf-framework/fcf-framework-lock.git"
   },
-  "homepage": "https://github.com/fcf-framework/fcf-framework-lock#readme",
+  "homepage": "https://fcf-framework.tech/packages/fcf-framework-lock",
   "keywords": [
     "fcf",
     "file lock",
