@@ -19,53 +19,6 @@
 #include "Storage.hpp"
 #include "Fcf/Scope.hpp"
 
-template <typename T1, typename F>
-struct Scope1  {
-  T1& a1;
-  F*   f;
-  Scope1(const Scope1&);
-  Scope1(Scope1&&);
-  Scope1(T1& a_a1, F a_f)
-    : a1(a_a1), f(a_f) {
-  };
-  ~Scope1(){
-    f(a1);
-  };
-};
-
-template <typename T1, typename T2, typename F>
-struct Scope2 {
-  T1& a1;
-  T2& a2;
-  F   f;
-  Scope2(const Scope2&);
-  Scope2(Scope2&&);
-  Scope2(T1& a_a1, T2& a_a2, F a_f)
-    : a1(a_a1), a2(a_a2), f(a_f) {
-  };
-  ~Scope2(){
-    f(a1, a2);
-  };
-};
-
-
-
-#define SCOPE1(a_arg, a_funcBody) \
-  typedef void(TFuncScope##__LINE__)(typeof(a_arg));\
-  Scope1<typeof(a_arg), TFuncScope##__LINE__> scope(a_arg, [](typeof(a_arg) a_arg) a_funcBody);
-
-
- #define GET_SCOPE(_0, _1, _2, NAME, ...) NAME
- #define SCOPE(...) GET_SCOPE(_0, ##__VA_ARGS__, FOO2, FOO1, FOO0)(__VA_ARGS__)
-
-// typedef void (*TFunc)(int, ShmData*);
-// TFunc func = [](int shm_id, ShmData* mutexData) {
-
-//Scope<typeof(shm_id), typeof(mutexData), TFunc> ls(shm_id, mutexData, func);
-
-
-
-
 class NamedMutexShm {
 private:
   struct ShmData {
@@ -78,8 +31,11 @@ private:
     ShmData*                data;
     int                     handle;
     bool                    complete;
+    bool                    result;
     std::mutex              mutex;
     std::condition_variable condition;
+    std::mutex              resultMutex;
+    std::condition_variable resultCondition;
   };
 
   typedef std::shared_ptr<LockData> PLockData;
@@ -208,20 +164,28 @@ public:
       a_cb(0);
     } else {
       PLockData pdata(new LockData());
-      pdata->data = mutexData;
-      pdata->handle = shm_id;
+      pdata->data     = mutexData;
+      pdata->handle   = shm_id;
       pdata->complete = false;
+      pdata->result   = false;
       int key(_s.set(pdata));
-      FCF_CLOSING_SCOPE(_s, key, mutexData, {
-        pthread_mutex_unlock(&mutexData->mutex);
-        _s.remove(key);
-      });
-      a_cb(key);
       {
-        std::unique_lock<std::mutex> lock(pdata->mutex);
-        if (!pdata->complete){
-          pdata->condition.wait(lock);
+        FCF_CLOSING_SCOPE(_s, key, mutexData, {
+          pthread_mutex_unlock(&mutexData->mutex);
+          _s.remove(key);
+        });
+        a_cb(key);
+        {
+          std::unique_lock<std::mutex> lock(pdata->mutex);
+          if (!pdata->complete){
+            pdata->condition.wait(lock);
+          }
         }
+      }
+      {
+        std::unique_lock<std::mutex> lock(pdata->resultMutex);
+        pdata->result = true;
+        pdata->resultCondition.notify_all();
       }
     }
   }
@@ -235,6 +199,12 @@ public:
       std::unique_lock<std::mutex> lock(pdata->mutex);
       pdata->complete = true;
       pdata->condition.notify_all();
+    }
+    {
+      std::unique_lock<std::mutex> lock(pdata->resultMutex);
+      if (!pdata->result){
+        pdata->resultCondition.wait(lock);
+      }
     }
   }
 

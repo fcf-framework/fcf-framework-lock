@@ -21,16 +21,50 @@
 #else
   #include <windows.h>
   #include <codecvt>
+  #include <io.h>
 #endif
 
 #include "NamedMutex.hpp"
 
+v8::Local<v8::String> toLocal(v8::Local<v8::String> a_wrapper){
+  return a_wrapper;
+}
+
+v8::Local<v8::String> toLocal(v8::MaybeLocal<v8::String> a_wrapper){
+  return a_wrapper.ToLocalChecked();
+}
+
+#if NODE_MAJOR_VERSION > 8
+  template <typename TIsolate, typename Ty>
+  std::string toString(const TIsolate& a_isolate, const Ty& a_value){
+    return *v8::String::Utf8Value(a_isolate, a_value);
+  }
+#else
+  template <typename TIsolate, typename Ty>
+  std::string toString(const TIsolate& a_isolate, const Ty& a_value){
+    return *v8::String::Utf8Value(a_value);
+  }
+#endif
 
 #ifndef WIN32
   typedef int THandle;
 #else
   typedef HANDLE THandle;
 #endif
+
+
+#ifndef uv_get_osfhandle
+  #ifndef WIN32
+    inline THandle uv_get_osfhandle(int a_ifd){
+      return a_ifd;
+    }
+  #else
+    inline THandle uv_get_osfhandle(int a_ifd){
+      return (THandle)_get_osfhandle(a_ifd);
+    }
+  #endif
+#endif
+
 
 enum ELock {
   L_LOCK,
@@ -134,7 +168,7 @@ void Complete(uv_async_t* a_uvasync) {
   {
     v8::HandleScope scope(lockInfo->isolate);
     v8::Local<v8::Value> args[3] = {
-                                      !lockInfo->error.empty() ? v8::Exception::Error(v8::String::NewFromUtf8(lockInfo->isolate, lockInfo->error.c_str()).ToLocalChecked())
+                                      !lockInfo->error.empty() ? v8::Exception::Error(toLocal(v8::String::NewFromUtf8(lockInfo->isolate, lockInfo->error.c_str())))
                                                                : (v8::Local<v8::Value>)v8::Undefined(lockInfo->isolate),
                                       lockInfo->fileNumber     ? (v8::Local<v8::Value>)v8::Number::New(lockInfo->isolate, lockInfo->fileNumber)
                                                                : (v8::Local<v8::Value>)v8::Undefined(lockInfo->isolate),
@@ -162,7 +196,7 @@ void Lock(const v8::FunctionCallbackInfo<v8::Value>& a_args) {
         !a_args[0]->IsNumber() ||
         !a_args[1]->IsFunction()
      ) {
-    v8::Local<v8::String> msg(v8::String::NewFromUtf8Literal(isolate, "Wrong arguments"));
+    v8::Local<v8::String> msg = toLocal(v8::String::NewFromUtf8(isolate, "Wrong arguments"));
     isolate->ThrowException(v8::Exception::TypeError(msg));
     return;
   }
@@ -234,12 +268,12 @@ void LockNamedMutex(const v8::FunctionCallbackInfo<v8::Value>& a_args) {
           !a_args[1]->IsString() ||
           !a_args[2]->IsFunction()
        ) {
-      v8::Local<v8::String> msg(v8::String::NewFromUtf8Literal(isolate, "Wrong arguments"));
+      v8::Local<v8::String> msg = toLocal(v8::String::NewFromUtf8(isolate, "Wrong arguments"));
       isolate->ThrowException(v8::Exception::TypeError(msg));
       return;
     }
-    name            = std::string(*v8::String::Utf8Value(isolate, a_args[0]));
-    cacheDirectory  = std::string(*v8::String::Utf8Value(isolate, a_args[1]));
+    name            = toString(isolate, a_args[0]);
+    cacheDirectory  = toString(isolate, a_args[1]);
     callback        = v8::Local<v8::Function>::Cast(a_args[2]);
   } else {
     if (
@@ -247,7 +281,7 @@ void LockNamedMutex(const v8::FunctionCallbackInfo<v8::Value>& a_args) {
           !a_args[0]->IsNumber() ||
           !a_args[1]->IsFunction()
        ) {
-      v8::Local<v8::String> msg(v8::String::NewFromUtf8Literal(isolate, "Wrong arguments"));
+      v8::Local<v8::String> msg(toLocal(v8::String::NewFromUtf8(isolate, "Wrong arguments")));
       isolate->ThrowException(v8::Exception::TypeError(msg));
       return;
     }

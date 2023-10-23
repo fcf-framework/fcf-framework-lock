@@ -16,6 +16,9 @@ private:
     bool                    complete;
     std::mutex              mutex;
     std::condition_variable condition;
+    bool                    result;
+    std::mutex              resultMutex;
+    std::condition_variable resultCondition;
   };
 
   typedef std::shared_ptr<LockData> PLockData;
@@ -43,18 +46,24 @@ public:
     } else {
       PLockData pdata(new LockData());
       pdata->complete = false;
-      int key = _s.set(pdata);
-      FCF_CLOSING_SCOPE(_s, key, handle, {
-        _s.remove(key);
-        ReleaseMutex(handle);
-      });
-      a_cb(key);
+      pdata->result   = false;
       {
-        std::unique_lock<std::mutex> lock(pdata->mutex);
-        if (!pdata->complete){
-          pdata->condition.wait(lock);
+        int key = _s.set(pdata);
+        FCF_CLOSING_SCOPE(_s, key, handle, {
+          _s.remove(key);
+          ReleaseMutex(handle);
+        });
+        a_cb(key);
+        {
+          std::unique_lock<std::mutex> lock(pdata->mutex);
+          if (!pdata->complete){
+            pdata->condition.wait(lock);
+          }
         }
       }
+      std::unique_lock<std::mutex> lock(pdata->resultMutex);
+      pdata->result = true;
+      pdata->resultCondition.notify_all();
     }
   }
 
@@ -67,6 +76,12 @@ public:
       std::unique_lock<std::mutex> lock(pdata->mutex);
       pdata->complete = true;
       pdata->condition.notify_all();
+    }
+    {
+      std::unique_lock<std::mutex> lock(pdata->resultMutex);
+      if (!pdata->result){
+        pdata->resultCondition.wait(lock);
+      }
     }
   }
 private:

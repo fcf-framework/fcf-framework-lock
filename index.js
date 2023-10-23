@@ -116,7 +116,15 @@ function islockFile(a_file, a_cb) {
 
 
 fcf.NLock.lockFile = (a_file, a_cb) => {
-  libUtil.promisify(lockFile)(a_file, false)
+  (new Promise((a_res, a_rej)=>{
+    lockFile(a_file, false, (a_error, a_lock)=>{ setImmediate(()=>{
+        if (a_error) {
+          a_rej(a_error);
+        } else {
+          a_res(a_lock);
+        }
+    })});
+  }))
   .then((a_res)=>{
     if (typeof a_cb === "function") {
       a_cb(undefined, a_res);
@@ -135,7 +143,15 @@ fcf.NLock.tryLockFile = (a_file, a_quiet, a_cb) => {
     a_cb = a_quiet;
     a_quiet = false;
   }
-  libUtil.promisify(lockFile)(a_file, true)
+  (new Promise((a_res, a_rej)=>{
+    lockFile(a_file, true, (a_error, a_lock)=>{ setImmediate(() => {
+      if (a_error) {
+        a_rej(a_error);
+      } else {
+        a_res(a_lock);
+      }
+    }) });
+  }))
   .then((a_res)=>{
     if (typeof a_cb === "function") {
       a_cb(undefined, a_res);
@@ -149,13 +165,20 @@ fcf.NLock.tryLockFile = (a_file, a_quiet, a_cb) => {
       } else {
         a_cb(a_error);
       }
-
     }
   });
 };
 
 fcf.NLock.unlockFile = (a_lock, a_cb) => {
-  libUtil.promisify(unlockFile)(a_lock)
+  (new Promise((a_res, a_rej)=>{
+    unlockFile(a_lock, (a_error)=>{ setImmediate(() => {
+      if (a_error) {
+        a_rej(a_error);
+      } else {
+        a_res();
+      }
+    }) } );
+  }))
   .then((a_res)=>{
     if (typeof a_cb === "function") {
       a_cb(undefined, a_res);
@@ -167,11 +190,18 @@ fcf.NLock.unlockFile = (a_lock, a_cb) => {
       a_cb(a_error);
     }
   });
-
 };
 
 fcf.NLock.isLockFile = (a_file, a_cb) => {
-  libUtil.promisify(islockFile)(a_file)
+  (new Promise((a_res, a_rej)=>{
+    islockFile(a_file, (a_error, a_islock)=>{ setImmediate(() => {
+      if (a_error) {
+        a_rej(a_error);
+      } else {
+        a_res(a_islock);
+      }
+    }) } );
+  }))
   .then((a_res)=>{
     if (typeof a_cb === "function") {
       a_cb(undefined, a_res);
@@ -194,13 +224,13 @@ fcf.NLock.lockNamedMutex = (a_name, a_cb) => {
     return;
   }
   new Promise((a_res, a_rej)=>{
-    libLock.lockNamedMutex(a_name, getCahceDirectory(), (a_error, a_lock)=>{
+    libLock.lockNamedMutex(a_name, getCahceDirectory(), (a_error, a_lock)=>{ setImmediate(() => {
       if (a_error) {
         a_rej(a_error);
       } else {
         a_res(a_lock);
       }
-    });
+    }); });
   })
   .catch((a_error)=>{
     restoreStack(a_error, stack);
@@ -225,7 +255,7 @@ fcf.NLock.tryLockNamedMutex = (a_name, a_quiet, a_cb) => {
   }
   let stack = (new Error()).stack;
   new Promise((a_res, a_rej)=>{
-    libLock.trylockNamedMutex(a_name, getCahceDirectory(), (a_error, a_lock, a_unavailable)=>{
+    libLock.trylockNamedMutex(a_name, getCahceDirectory(), (a_error, a_lock, a_unavailable)=>{ setImmediate(() => {
       if (a_unavailable) {
         a_error.unavailable = a_unavailable;
         if (a_quiet) {
@@ -239,7 +269,7 @@ fcf.NLock.tryLockNamedMutex = (a_name, a_quiet, a_cb) => {
         a_rej(a_error);
       }
     });
-  })
+  }); })
   .catch((a_error)=>{
     restoreStack(a_error, stack);
     a_cb(a_error);
@@ -260,13 +290,13 @@ fcf.NLock.unlockNamedMutex = (a_lock, a_cb) => {
     return;
   }
   new Promise((a_res, a_rej)=>{
-    libLock.unlockNamedMutex(a_lock, (a_error, a_lock)=>{
+    libLock.unlockNamedMutex(a_lock, (a_error, a_lock)=>{ setImmediate(() => {
       if (a_error) {
         a_rej(a_error);
       } else {
         a_res(a_lock);
       }
-    });
+    })});
   })
   .catch((a_error)=>{
     restoreStack(a_error, stack);

@@ -3,6 +3,10 @@
 Packet provides functions for locking on a file and named mutexes.
 The package is compatible with UNIX systems and Windows.
 
+Supported OS: UNIX & Windows
+
+The package supports NODEJS version 6 and all following.
+
 Package description page: https://fcf-framework.tech/packages/fcf-framework-lock
 
 ## lockFile(string a_filePath, function a_cb)
